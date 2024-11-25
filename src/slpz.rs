@@ -15,18 +15,6 @@ Options:
   -h, --help
   -v, --version";
 
-macro_rules! unwrap_option {
-    ($e:expr) => {
-        match $e {
-            Some(e) => e,
-            None => {
-                eprintln!("{}", HELP);
-                std::process::exit(1);
-            }
-        }
-    }
-}
-
 fn main() {
     let mut options = Options::DEFAULT;
 
@@ -35,7 +23,13 @@ fn main() {
     let mut arg_strings = arg_strings.collect::<Vec<_>>();
 
     // last arg is path
-    let input_path = unwrap_option!(arg_strings.pop());
+    let input_path = match arg_strings.pop() {
+        Some(p) => p,
+        None => {
+            eprintln!("{}", HELP);
+            std::process::exit(1);
+        }
+    };
 
     if &input_path == "-h" || &input_path == "--help" {
         println!("{}", HELP);
