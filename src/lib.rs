@@ -91,6 +91,7 @@ pub fn compress(compressor: &mut Compressor, slp: &[u8]) -> Result<Vec<u8>, Comp
     // get metadata
     let raw_len = u32::from_be_bytes(slp[11..15].try_into().unwrap()) as usize;
     let metadata_offset = 15+raw_len;
+    if slp.len() < metadata_offset as usize { return Err(CompError::InvalidFile) }
     let metadata = &slp[metadata_offset..];
 
     // get event sizes
@@ -105,6 +106,9 @@ pub fn compress(compressor: &mut Compressor, slp: &[u8]) -> Result<Vec<u8>, Comp
     if slp.len() < game_start_offset+game_start_size { return Err(CompError::InvalidFile) }
     if slp[game_start_offset] != GAME_START { return Err(CompError::InvalidFile) }
     let game_start_payload = &slp[game_start_offset..][..game_start_size];
+
+    let other_events_offset = game_start_offset+game_start_size;
+    if metadata_offset < other_events_offset { return Err(CompError::InvalidFile); }
 
     let mut slpz = Vec::with_capacity(slp.len());
 
@@ -131,9 +135,7 @@ pub fn compress(compressor: &mut Compressor, slp: &[u8]) -> Result<Vec<u8>, Comp
     let len = slpz.len() as u32;
     slpz[16..20].copy_from_slice(&len.to_be_bytes());
 
-    let other_events_offset = game_start_offset+game_start_size;
     let mut reordered_data = Vec::with_capacity(slp.len());
-    if metadata_offset < other_events_offset { return Err(CompError::InvalidFile); }
     let written = reorder_events(&slp[other_events_offset..metadata_offset], &event_sizes, &mut reordered_data)?;
     slpz[20..24].copy_from_slice(&(written as u32).to_be_bytes());
 
