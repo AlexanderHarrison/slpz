@@ -90,6 +90,7 @@ pub fn compress(compressor: &mut Compressor, slp: &[u8]) -> Result<Vec<u8>, Comp
 
     // get metadata
     let raw_len = u32::from_be_bytes(slp[11..15].try_into().unwrap()) as usize;
+    if raw_len == 0 { return Err(CompError::InvalidFile) };
     let metadata_offset = 15+raw_len;
     let metadata = &slp[metadata_offset..];
 
