@@ -479,7 +479,6 @@ pub fn target_path(
             if will_compress {
                 for s in slices {
                     scope.spawn(move || {
-                        let sender = sender_ref;
                         let mut compressor = match Compressor::new(options.level) {
                             Some(c) => c,
                             None => {
@@ -489,14 +488,13 @@ pub fn target_path(
                         };
                         for t in s {
                             compress_target(&mut compressor, options, t);
-                            if let Some(sender) = sender { sender.send(1).expect("Sending failed"); }
+                            if let Some(sender) = sender_ref { sender.send(1).expect("Sending failed"); }
                         }
                     });
                 }
             } else {
                 for s in slices {
                     scope.spawn(move || {
-                        let sender = sender_ref;
                         let mut decompressor = match Decompressor::new() {
                             Some(d) => d,
                             None => {
@@ -506,7 +504,7 @@ pub fn target_path(
                         };
                         for t in s {
                             decompress_target(&mut decompressor, options, t);
-                            if let Some(sender) = sender { sender.send(1).expect("Sending failed"); }
+                            if let Some(sender) = sender_ref { sender.send(1).expect("Sending failed"); }
                         }
                     });
                 }
