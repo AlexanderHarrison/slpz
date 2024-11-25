@@ -3,11 +3,11 @@
 //! You can expect slpz files to be around 8x to 12x times smaller than slp files for regular matches.
 //! (~3Mb down to ~300Kb).
 //!
-//! Compression is done with the zstd compression library. 
+//! Compression is done with the zstd compression library.
 //! zstd is not required on the user's computer; the library is statically linked at compile time.
 //!
 //! The slpz format is documented in the readme in the repo.
-//! Important information, such as player tags, stages, date, characters, etc. all remain uncompressed in the slpz format. 
+//! Important information, such as player tags, stages, date, characters, etc. all remain uncompressed in the slpz format.
 //! This allows slp file browsers to easily parse and display this information without needing to decompress the replay.
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -72,7 +72,7 @@ impl Compressor {
     /// compression_level should be between 1..=19. The default is 3.
     pub fn new(compression_level: i32) -> Option<Compressor> {
         Some(Compressor {
-            ctx: zstd::bulk::Compressor::new(compression_level).ok()?
+            ctx: zstd::bulk::Compressor::new(compression_level).ok()?,
         })
     }
 }
@@ -86,18 +86,18 @@ impl Decompressor {
 /// Compresses an slp file to an slpz file.
 pub fn compress(compressor: &mut Compressor, slp: &[u8]) -> Result<Vec<u8>, CompError> {
     if slp.len() < 16 { return Err(CompError::InvalidFile) }
-    if &slp[0..11] != &RAW_HEADER { return Err(CompError::InvalidFile) }
+    if slp[0..11] != RAW_HEADER { return Err(CompError::InvalidFile) }
 
     // get metadata
     let raw_len = u32::from_be_bytes(slp[11..15].try_into().unwrap()) as usize;
-    let metadata_offset = 15+raw_len;
+    let metadata_offset = 15 + raw_len;
     if slp.len() < metadata_offset as usize { return Err(CompError::InvalidFile) }
     let metadata = &slp[metadata_offset..];
 
     // get event sizes
     if slp[15] != EVENT_PAYLOADS { return Err(CompError::InvalidFile) }
     let (event_sizes, event_type_count) = event_sizes(&slp[15..]).ok_or(CompError::InvalidFile)?;
-    let event_sizes_size = 2+event_type_count*3;
+    let event_sizes_size = 2 + event_type_count * 3;
     let event_sizes_payload = &slp[15..][..event_sizes_size];
 
     // get game start
@@ -148,6 +148,7 @@ pub fn compress(compressor: &mut Compressor, slp: &[u8]) -> Result<Vec<u8>, Comp
 }
 
 /// Decompresses an slpz file to an slp file.
+#[rustfmt::skip]
 pub fn decompress(decompressor: &mut Decompressor, slpz: &[u8]) -> Result<Vec<u8>, DecompError> {
     if slpz.len() < 24 { return Err(DecompError::InvalidFile) }
     let version                  = u32::from_be_bytes(slpz[0..4].try_into().unwrap());
@@ -159,8 +160,8 @@ pub fn decompress(decompressor: &mut Decompressor, slpz: &[u8]) -> Result<Vec<u8
 
     if slpz.len() < compressed_events_offset { return Err(DecompError::InvalidFile) }
 
-    // We do not return a custom version error here. 
-    // If a file is invalid, it would raise this error instead of an InvalidFile. 
+    // We do not return a custom version error here.
+    // If a file is invalid, it would raise this error instead of an InvalidFile.
     // Unsupported version errors would be nice to check, but too many false positives.
     if version > VERSION { return Err(DecompError::InvalidFile) }
 
@@ -187,14 +188,14 @@ pub fn decompress(decompressor: &mut Decompressor, slpz: &[u8]) -> Result<Vec<u8
 
 /// Reorders events into byte columns.
 fn reorder_events(
-    events: &[u8], 
+    events: &[u8],
     event_sizes: &[u16; 256],
     buf: &mut Vec<u8>,
 ) -> Result<usize, CompError> {
     let event_counts = event_counts(events, event_sizes)?;
 
     // ---------------------------------------
-    // Build the offset lookup table 'reordered_event_offsets'. 
+    // Build the offset lookup table 'reordered_event_offsets'.
     // This is the offset of the start of the reordered data for each event in the reordered event data section.
 
     let mut total_events = 0usize;
@@ -204,11 +205,11 @@ fn reorder_events(
         let size = event_sizes[i];
         let count = event_counts[i];
         total_events += count as usize;
-        
+
         let event_total_size = size as u32 * count;
 
         // offset for next event is the end of this event.
-        reordered_event_offsets[i+1] = reordered_event_offsets[i] + event_total_size;
+        reordered_event_offsets[i + 1] = reordered_event_offsets[i] + event_total_size;
     }
 
     let reordered_size = {
@@ -254,7 +255,7 @@ fn reorder_events(
 
         let write_start = event_offset + written;
         for j in 0..size {
-            data[write_start + j*stride] = events[1+i+j];
+            data[write_start + j * stride] = events[1 + i + j];
         }
 
         events_written[event] += 1;
@@ -269,9 +270,9 @@ fn reorder_events(
 /// Undoes the reordering done by 'reorder_events'.
 ///
 /// Returns the number of bytes written.
-fn unorder_events(
-    b: &[u8], 
-    event_sizes: &[u16; 256], 
+pub(crate) fn unorder_events(
+    b: &[u8],
+    event_sizes: &[u16; 256],
     buf: &mut Vec<u8>,
 ) -> Result<usize, DecompError> {
     let total_events = u32::from_be_bytes(b[0..4].try_into().unwrap()) as usize;
@@ -281,7 +282,7 @@ fn unorder_events(
 
     let mut event_counts = [0u32; 256];
     for i in 0..total_events {
-        let event = b[event_order_list_offset+i] as usize;
+        let event = b[event_order_list_offset + i] as usize;
         event_counts[event] += 1;
     }
 
@@ -289,11 +290,11 @@ fn unorder_events(
     for i in 0..255 {
         let size = event_sizes[i];
         let count = event_counts[i];
-        
+
         let event_total_size = size as u32 * count;
 
         // offset for next event is the end of this event.
-        reordered_event_offsets[i+1] = reordered_event_offsets[i] + event_total_size;
+        reordered_event_offsets[i + 1] = reordered_event_offsets[i] + event_total_size;
     }
 
     let unordered_size = {
@@ -315,8 +316,7 @@ fn unorder_events(
     let mut events_written = [0u32; 256];
 
     let mut data_i = 0;
-    for event_i in 0..total_events {
-        let event_u8 = event_order_list[event_i];
+    for &event_u8 in event_order_list.iter().take(total_events) {
         let event = event_u8 as usize;
 
         // command byte
@@ -330,7 +330,7 @@ fn unorder_events(
 
         let write_start = event_offset + written;
         for j in 0..size {
-            data[1+data_i+j] = events[write_start + j*stride];
+            data[1 + data_i + j] = events[write_start + j * stride];
         }
 
         events_written[event] += 1;
@@ -351,13 +351,13 @@ fn event_sizes(events: &[u8]) -> Option<([u16; 256], usize)> {
 
     let mut event_payload_sizes = [0; 256];
     for i in 0..event_count {
-        let offset = i*3 + 2;
+        let offset = i * 3 + 2;
         let command_byte = events[offset] as usize;
-        let payload_size = u16::from_be_bytes(events[offset+1..][..2].try_into().unwrap());
+        let payload_size = u16::from_be_bytes(events[offset + 1..][..2].try_into().unwrap());
         event_payload_sizes[command_byte] = payload_size;
     }
 
-    Some((event_payload_sizes, event_count as usize))
+    Some((event_payload_sizes, event_count))
 }
 
 fn event_counts(events: &[u8], event_sizes: &[u16; 256]) -> Result<[u32; 256], CompError> {
@@ -416,7 +416,7 @@ pub fn target_path(
     sender: Option<std::sync::mpsc::Sender<usize>>,
 ) -> Result<(), TargetPathError> {
     if !matches!(path.try_exists(), Ok(true)) { return Err(TargetPathError::PathNotFound) }
-    
+
     let mut targets = Vec::new();
     let mut should_compress = options.compress;
 
@@ -426,10 +426,10 @@ pub fn target_path(
             None => return Err(TargetPathError::CompressOrDecompressAmbiguous),
         };
         let ex = std::ffi::OsStr::new(if c { "slp" } else { "slpz" });
-        get_targets(&mut targets, &path, options.recursive, ex);
+        get_targets(&mut targets, path, options.recursive, ex);
     } else if path.is_file() {
         targets.push(path.to_path_buf());
-        if should_compress == None {
+        if should_compress.is_none() {
             let ex = path.extension();
             if ex == Some(std::ffi::OsStr::new("slp")) {
                 should_compress = Some(true);
@@ -446,19 +446,21 @@ pub fn target_path(
         None => return Err(TargetPathError::CompressOrDecompressAmbiguous),
     };
 
-    if let Some(ref sender) = sender { sender.send(targets.len()).expect("Sending failed"); }
+    if let Some(ref sender) = sender {
+        sender.send(targets.len()).expect("Sending failed");
+    }
 
     if !options.threading || targets.len() < 8 {
         if will_compress {
             let mut compressor = Compressor::new(options.level).ok_or(TargetPathError::ZstdInitError)?;
-            for t in targets.iter() { 
-                compress_target(&mut compressor, options, t); 
+            for t in &targets {
+                compress_target(&mut compressor, options, t);
                 if let Some(ref sender) = sender { sender.send(1).expect("Sending failed"); }
             }
         } else {
             let mut decompressor = Decompressor::new().ok_or(TargetPathError::ZstdInitError)?;
-            for t in targets.iter() { 
-                decompress_target(&mut decompressor, options, t); 
+            for t in &targets {
+                decompress_target(&mut decompressor, options, t);
                 if let Some(ref sender) = sender { sender.send(1).expect("Sending failed"); }
             }
         }
@@ -477,7 +479,7 @@ pub fn target_path(
             if will_compress {
                 for s in slices {
                     scope.spawn(move || {
-                        let sender = sender_ref.clone();
+                        let sender = sender_ref;
                         let mut compressor = match Compressor::new(options.level) {
                             Some(c) => c,
                             None => {
@@ -485,16 +487,16 @@ pub fn target_path(
                                 return;
                             }
                         };
-                        for t in s { 
-                            compress_target(&mut compressor, options, t); 
-                            if let Some(ref sender) = sender { sender.send(1).expect("Sending failed"); }
+                        for t in s {
+                            compress_target(&mut compressor, options, t);
+                            if let Some(sender) = sender { sender.send(1).expect("Sending failed"); }
                         }
                     });
                 }
             } else {
                 for s in slices {
                     scope.spawn(move || {
-                        let sender = sender_ref.clone();
+                        let sender = sender_ref;
                         let mut decompressor = match Decompressor::new() {
                             Some(d) => d,
                             None => {
@@ -502,32 +504,32 @@ pub fn target_path(
                                 return;
                             }
                         };
-                        for t in s { 
-                            decompress_target(&mut decompressor, options, t); 
-                            if let Some(ref sender) = sender { sender.send(1).expect("Sending failed"); }
+                        for t in s {
+                            decompress_target(&mut decompressor, options, t);
+                            if let Some(sender) = sender { sender.send(1).expect("Sending failed"); }
                         }
                     });
                 }
             };
         })
     }
-    
+
     Ok(())
 }
 
 fn compress_target(c: &mut Compressor, options: &Options, t: &std::path::PathBuf) {
-    let slp = match std::fs::read(&t) {
+    let slp = match std::fs::read(t) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Error compressing {}: {}", t.display(), e);
             return;
         }
     };
-    
+
     match compress(c, &slp) {
         Ok(slpz) => {
             let mut out = t.clone();
-            if !out.set_extension("slpz") { 
+            if !out.set_extension("slpz") {
                 eprintln!("Error creating new filename for {}", t.display());
                 return;
             };
@@ -535,74 +537,68 @@ fn compress_target(c: &mut Compressor, options: &Options, t: &std::path::PathBuf
                 Ok(_) => {
                     if options.log { println!("compressed {}", t.display()); }
                     if !options.keep {
-                        match std::fs::remove_file(&t) {
+                        match std::fs::remove_file(t) {
                             Ok(_) => if options.log { println!("removed {}", t.display()) },
                             Err(e) => {
                                 eprintln!("Error removing {}: {}", t.display(), e);
-                                return;
                             }
                         }
                     }
                 }
                 Err(e) => {
                     eprintln!("Error compressing {}: {}", t.display(), e);
-                    return;
-                },
-            };
+                }
+            }
         }
         Err(e) => {
             eprintln!("Error compressing {}: {}", t.display(), e);
-            return;
         }
     }
 }
 
 fn decompress_target(d: &mut Decompressor, options: &Options, t: &std::path::PathBuf) {
-    let slpz = match std::fs::read(&t) {
+    let slpz = match std::fs::read(t) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Error decompressing {}: {}", t.display(), e);
             return;
         }
     };
-    
+
     match decompress(d, &slpz) {
         Ok(slp) => {
             let mut out = t.clone();
-            if !out.set_extension("slp") { 
+            if !out.set_extension("slp") {
                 eprintln!("Error creating new filename for {}", t.display());
-                return; 
+                return;
             };
             match std::fs::write(&out, &slp) {
                 Ok(_) => {
                     if options.log { println!("decompressed {}", t.display()); }
                     if !options.keep {
-                        match std::fs::remove_file(&t) {
+                        match std::fs::remove_file(t) {
                             Ok(_) => if options.log { println!("removed {}", t.display()) },
                             Err(e) => {
                                 eprintln!("Error removing {}: {}", t.display(), e);
-                                return;
                             }
                         }
                     }
                 }
                 Err(e) => {
                     eprintln!("Error decompressing {}: {}", t.display(), e);
-                    return;
                 }
-            };
+            }
         }
         Err(e) => {
             eprintln!("Error decompressing {}: {}", t.display(), e);
-            return;
         }
     }
 }
 
 fn get_targets(
-    targets: &mut Vec<std::path::PathBuf>, 
-    path: &std::path::Path, 
-    rec: bool, 
+    targets: &mut Vec<std::path::PathBuf>,
+    path: &std::path::Path,
+    rec: bool,
     ex: &std::ffi::OsStr,
 ) -> Option<()> {
     for f in std::fs::read_dir(path).ok()? {
@@ -618,4 +614,34 @@ fn get_targets(
     }
 
     Some(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reorder_round_trip() {
+        #[rustfmt::skip]
+        let events = [
+            3, 1, 2, 3, 4, 5,
+            1, 0, 1, 2,
+            1, 10, 11, 12,
+            2, 1,
+            2, 2,
+            3, 1, 2, 3, 4, 5,
+            1, 20, 21, 22
+        ];
+        let mut event_sizes = [0u16; 256];
+        event_sizes[..4].copy_from_slice(&[0, 3, 1, 5]);
+
+        let mut reordered = Vec::new();
+        reorder_events(&events, &event_sizes, &mut reordered).unwrap();
+        println!("{:?}", reordered);
+
+        let mut unordered = Vec::new();
+        unorder_events(&reordered, &event_sizes, &mut unordered).unwrap();
+
+        assert_eq!(events.as_slice(), &unordered);
+    }
 }

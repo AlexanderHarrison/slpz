@@ -1,13 +1,13 @@
 use slpz::*;
 
-const HELP: &'static str =
+const HELP: &str =
 "Usage: slpz [OPTIONS] <input path>
 
 Options:
   --fast                Prefer speed over compression [Default]
   --small               Prefer compression over speed
-  -x, --compress        
-  -d, --decompress      
+  -x, --compress
+  -d, --decompress
   -r, --recursive       Compress/decompress all files in subdirectories.
   -k, --keep            Keep files after compression/decompression. [Default]
   --rm                  Remove files after compression/decompression.
@@ -28,7 +28,7 @@ macro_rules! unwrap_option {
 }
 
 fn main() {
-    let mut options = Options::DEFAULT; 
+    let mut options = Options::DEFAULT;
 
     let mut arg_strings = std::env::args();
     arg_strings.next(); // skip exe name
@@ -48,9 +48,7 @@ fn main() {
     }
 
     let mut i = 0;
-    loop {
-        let a = match arg_strings.get(i) { Some(a) => a, None => break, };
-
+    while let Some(a) = arg_strings.get(i) {
         match a.as_ref() {
             "--fast" => options.level = 3,
             "--small" => options.level = 12,

@@ -4,14 +4,14 @@ fn main() {
 
     let t = std::time::Instant::now();
 
-    let mut compressor = slp_compress::Compressor::new(4).unwrap();
-    let ret = slp_compress::compress(&mut compressor, &slp).unwrap();
+    let mut compressor = slpz::Compressor::new(4).unwrap();
+    let ret = slpz::compress(&mut compressor, &slp).unwrap();
 
     let d = std::time::Instant::now();
     println!("compress in {}ms", (d - t).as_secs_f64() * 1000.0);
 
-    let mut decompressor = slp_compress::Decompressor::new().unwrap();
-    let slp_round_trip = slp_compress::decompress(&mut decompressor, &ret).unwrap();
+    let mut decompressor = slpz::Decompressor::new().unwrap();
+    let slp_round_trip = slpz::decompress(&mut decompressor, &ret).unwrap();
 
     println!("decompress in {}ms", d.elapsed().as_secs_f64() * 1000.0);
 
@@ -22,5 +22,5 @@ fn main() {
     // out.push_str(".slp");
     // std::fs::write(&out, &slp_round_trip).unwrap();
 
-    assert!(&slp_round_trip == &slp);
+    assert_eq!(&slp_round_trip, &slp);
 }
