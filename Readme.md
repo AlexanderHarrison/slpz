@@ -1,5 +1,5 @@
 # slpz
-Slpz compresses and decomoresses Slippi replay (slp) files. 
+Slpz compresses and decompresses Slippi replay (slp) files. 
 The slpz format is 100% supported by [rwing](https://x.com/rwing_aitch/status/1844056466283692388), meaning you can watch back, browse, and export savestates even while your replays are compressed.  
 
 You can expect slpz files to be around 8x to 12x times smaller than slp files for regular matches. (~3Mb down to ~300Kb).
@@ -33,9 +33,12 @@ Programmers can also use slpz as a [library](https://crates.io/crates/slpz).
 - 8..12: Game Start offset
 - 12..16: Metadata offset
 - 16..20: Compressed events offset
-- 20..24: size of uncompressed events
+- 20..24: Size of uncompressed events
 
-All offsets are from file start.
+All offsets are from file start. 
+
+The sections must be contiguous. E.x. the metadata section is always from `slpz[metadata_offset..compressed_events_offset]`,
+and the compressed events section is from `slpz[compressed_events_offset..]`.
 
 ## Event Sizes
 This is equivalent to the 'Event Payloads' event in the [SLP Spec](https://github.com/project-slippi/slippi-wiki/blob/master/SPEC.md#event-payloads).
