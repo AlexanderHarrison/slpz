@@ -10,6 +10,8 @@
 //! Important information, such as player tags, stages, date, characters, etc. all remain uncompressed in the slpz format.
 //! This allows slp file browsers to easily parse and display this information without needing to decompress the replay.
 
+use std::path::{Path, PathBuf};
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum CompError {
     InvalidFile,
@@ -375,7 +377,7 @@ fn event_counts(events: &[u8], event_sizes: &[u16; 256]) -> Result<[u32; 256], C
     Ok(counts)
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Options {
     pub keep: bool,
     pub compress: Option<bool>,
@@ -384,6 +386,7 @@ pub struct Options {
     /// must be between 1 and 19.
     pub level: i32,
     pub log: bool,
+    pub output_path: Option<PathBuf>,
 }
 
 impl Default for Options {
@@ -398,6 +401,7 @@ impl Options {
         threading: true,
         level: 3,
         log: true,
+        output_path: None,
     };
 }
 
@@ -415,30 +419,36 @@ pub fn target_path(
     path: &std::path::Path,
     sender: Option<std::sync::mpsc::Sender<usize>>,
 ) -> Result<(), TargetPathError> {
-    if !matches!(path.try_exists(), Ok(true)) { return Err(TargetPathError::PathNotFound) }
-
     let mut targets = Vec::new();
     let mut should_compress = options.compress;
 
-    if path.is_dir() {
-        let c = match should_compress {
-            Some(c) => c,
-            None => return Err(TargetPathError::CompressOrDecompressAmbiguous),
-        };
-        let ex = std::ffi::OsStr::new(if c { "slp" } else { "slpz" });
-        get_targets(&mut targets, path, options.recursive, ex);
-    } else if path.is_file() {
-        targets.push(path.to_path_buf());
-        if should_compress.is_none() {
-            let ex = path.extension();
-            if ex == Some(std::ffi::OsStr::new("slp")) {
-                should_compress = Some(true);
-            } else if ex == Some(std::ffi::OsStr::new("slpz")) {
-                should_compress = Some(false);
-            }
-        }
+    if path == Path::new("-") {
+        targets.push(path.to_owned());
     } else {
-        return Err(TargetPathError::PathInvalid);
+        if !matches!(path.try_exists(), Ok(true)) {
+            return Err(TargetPathError::PathNotFound)
+        }
+
+        if path.is_dir() {
+            let c = match should_compress {
+                Some(c) => c,
+                None => return Err(TargetPathError::CompressOrDecompressAmbiguous),
+            };
+            let ex = std::ffi::OsStr::new(if c { "slp" } else { "slpz" });
+            get_targets(&mut targets, path, options.recursive, ex);
+        } else if path.is_file() {
+            targets.push(path.to_path_buf());
+            if should_compress.is_none() {
+                let ex = path.extension();
+                if ex == Some(std::ffi::OsStr::new("slp")) {
+                    should_compress = Some(true);
+                } else if ex == Some(std::ffi::OsStr::new("slpz")) {
+                    should_compress = Some(false);
+                }
+            }
+        } else {
+            return Err(TargetPathError::PathInvalid);
+        }
     }
 
     let will_compress = match should_compress {
@@ -516,7 +526,17 @@ pub fn target_path(
 }
 
 fn compress_target(c: &mut Compressor, options: &Options, t: &std::path::PathBuf) {
-    let slp = match std::fs::read(t) {
+    let res = if t == Path::new("-") {
+        use std::io::Read;
+        let mut b = Vec::new();
+        std::io::stdin()
+            .read_to_end(&mut b)
+            .map(|_| b)
+    } else {
+        std::fs::read(t)
+    };
+
+    let slp = match res {
         Ok(s) => s,
         Err(e) => {
             eprintln!("Error compressing {}: {}", t.display(), e);
@@ -526,12 +546,26 @@ fn compress_target(c: &mut Compressor, options: &Options, t: &std::path::PathBuf
 
     match compress(c, &slp) {
         Ok(slpz) => {
-            let mut out = t.clone();
-            if !out.set_extension("slpz") {
-                eprintln!("Error creating new filename for {}", t.display());
-                return;
+            let out = match options.output_path.as_ref() {
+                Some(p) => p.clone(),
+                None => {
+                    let mut p = t.clone();
+                    if !p.set_extension("slpz") {
+                        eprintln!("Error creating new filename for {}", t.display());
+                        return;
+                    };
+                    p
+                }
             };
-            match std::fs::write(&out, &slpz) {
+            
+            let err = if &out == Path::new("-") {
+                use std::io::Write;
+                std::io::stdout().write_all(&slpz)
+            } else {
+                std::fs::write(&out, &slpz)
+            };
+            
+            match err {
                 Ok(_) => {
                     if options.log { println!("compressed {}", t.display()); }
                     if !options.keep {
@@ -555,22 +589,46 @@ fn compress_target(c: &mut Compressor, options: &Options, t: &std::path::PathBuf
 }
 
 fn decompress_target(d: &mut Decompressor, options: &Options, t: &std::path::PathBuf) {
-    let slpz = match std::fs::read(t) {
+    let res = if t == Path::new("-") {
+        use std::io::Read;
+        let mut b = Vec::new();
+        std::io::stdin()
+            .read_to_end(&mut b)
+            .map(|_| b)
+    } else {
+        std::fs::read(t)
+    };
+
+    let slpz = match res {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("Error decompressing {}: {}", t.display(), e);
+            eprintln!("Error compressing {}: {}", t.display(), e);
             return;
         }
     };
 
     match decompress(d, &slpz) {
         Ok(slp) => {
-            let mut out = t.clone();
-            if !out.set_extension("slp") {
-                eprintln!("Error creating new filename for {}", t.display());
-                return;
+            let out = match options.output_path.as_ref() {
+                Some(p) => p.clone(),
+                None => {
+                    let mut p = t.clone();
+                    if !p.set_extension("slp") {
+                        eprintln!("Error creating new filename for {}", t.display());
+                        return;
+                    };
+                    p
+                }
             };
-            match std::fs::write(&out, &slp) {
+            
+            let err = if &out == Path::new("-") {
+                use std::io::Write;
+                std::io::stdout().write_all(&slp)
+            } else {
+                std::fs::write(&out, &slp)
+            };
+            
+            match err {
                 Ok(_) => {
                     if options.log { println!("decompressed {}", t.display()); }
                     if !options.keep {

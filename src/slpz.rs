@@ -12,6 +12,7 @@ Options:
   -k, --keep            Keep files after compression/decompression. [Default]
   --rm                  Remove files after compression/decompression.
   -q, --quiet           Do not log to stdout.
+  -o, --output <file>   Specify output file. Pass '-' for stdout. Pass '-' as the input path for stdin.
   -h, --help
   -v, --version";
 
@@ -52,6 +53,14 @@ fn main() {
             "-k" | "--keep" => options.keep = true,
             "--rm" => options.keep = false,
             "-q" | "--quiet" => options.log = false,
+            "-o" | "--output" => {
+                i += 1;
+                let Some(out_path) = arg_strings.get(i) else {
+                    eprintln!("Error: arg '{}' requires an argument!", &a);
+                    std::process::exit(1);
+                };
+                options.output_path = Some(out_path.clone().into());
+            }
             "-h" | "--help" => {
                 println!("{}", HELP);
                 std::process::exit(0);
@@ -64,6 +73,15 @@ fn main() {
         }
 
         i += 1;
+    }
+    
+    if &input_path == "-" && options.output_path.is_none() {
+        eprintln!("Error: must specify output path when using stdin.");
+        std::process::exit(1);
+    }
+    
+    if options.output_path.as_ref().is_some_and(|p| p == std::path::Path::new("-")) {
+        options.log = false;
     }
 
     if let Err(e) = target_path(&options, std::path::Path::new(&input_path), None) {
