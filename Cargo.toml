@@ -12,6 +12,7 @@ repository = "https://github.com/AlexanderHarrison/slpz"
 documentation = "https://docs.rs/slpz/"
 
 [dependencies]
+clap = { version = "4.5", features = ["derive"] }
 zstd = { version = "0.13", default-features = false, features = ["thin"] }
 
 [lib]
