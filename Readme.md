@@ -86,4 +86,4 @@ slpz does not care about the contents of events, and will work for all slp spec 
 2. **Performance**: slpz uses zstd compression. slippc uses lzma compression.
 lzma compresses slightly better than zstd, but takes order of magnitudes longer to compress and decompress.
 Incredibly fast decompression allows slpz files to be watched back, browsed, and used just like regular slp files,
-without needing seconds of waiting for decompression.
+without waiting seconds for decompression.
